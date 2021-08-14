@@ -4,14 +4,19 @@
 
 ![tracerdefault](imgs/tracer01_default.png?raw=true)
 
-Currently implemented:
+## Cornell Box
+
+![tracerbox](imgs/tracer02_cornellbox.png?raw=true)
+
+
+## Currently implemented:
  - [x] Multi-bounce reflection and refraction
  - [x] Metallic property
  - [x] GGX surface normal distribution
  - [x] HDRI environment map
- - [ ] Light emission
+ - [x] Light emission
 
- Tested environment:
+## Tested environment:
   - Windows 10 19042
   - MSVC 14.29
   - CUDA SDK v10.2

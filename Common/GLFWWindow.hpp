@@ -3,12 +3,15 @@
 #include <string>
 //#define GLFW_INCLUDE_GLCOREARB
 #include "GLFW/glfw3.h"
+#include "Math/Vec.hpp"
 
-struct vec2i{int x, y;};
 
 class GLFWWindow {
+
     GLuint fbTexture{ 0 };
 public:
+    using vec2i = CUDATracer::Math::vec2i;
+
     GLFWWindow(
         const std::string& title,
         unsigned width = 1024, unsigned height = 768
@@ -25,7 +28,7 @@ public:
     }
 
     /*! put pixels on the screen ... */
-    virtual void draw()
+    virtual void Update()
     { /* empty - to be subclassed by user */
     }
 

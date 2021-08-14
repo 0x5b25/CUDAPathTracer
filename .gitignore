@@ -59,4 +59,4 @@ out
 #Other files
 .vs
 .vscode
-
+CMakeSettings.json

@@ -179,69 +179,6 @@ namespace CUDATracer {
         return sdir;
     }
 
-    __both__ __forceinline__ bool TestAABB(
-        const AABB& box,
-        const Ray& ray,
-        const Math::mat4x4f& transform,
-        float& tmin, float& tmax
-    ) {
-        auto aabb = box.Transformed(transform);
-
-        float minx = aabb.min.x,
-            miny = aabb.min.y,
-            minz = aabb.min.z;
-
-        float maxx = aabb.max.x,
-            maxy = aabb.max.y,
-            maxz = aabb.max.z;
-
-        //return TestAABB(transformed, ray);
-
-        //assert(b.max.z > 0.9);
-        tmin = -Math::infty(),
-        tmax = Math::infty();
-
-        auto dx = ray.dir.x;
-        auto dy = ray.dir.y;
-        auto dz = ray.dir.z;
-
-        if (dx != 0.0) {
-            float tx1 = (minx - ray.origin.x) / dx;
-            float tx2 = (maxx - ray.origin.x) / dx;
-
-            tmin = max(tmin, min(tx1, tx2));
-            tmax = min(tmax, max(tx1, tx2));
-        }
-
-        if (dy != 0.0) {
-            float ty1 = (miny - ray.origin.y) / dy;
-            float ty2 = (maxy - ray.origin.y) / dy;
-
-            tmin = max(tmin, min(ty1, ty2));
-            tmax = min(tmax, max(ty1, ty2));
-        }
-
-
-        if (dz != 0.0) {
-            float tz1 = (minz - ray.origin.z) / dz;
-            float tz2 = (maxz - ray.origin.z) / dz;
-
-            tmin = max(tmin, min(tz1, tz2));
-            tmax = min(tmax, max(tz1, tz2));
-        }
-
-        return tmax >= tmin && tmax >= 0;
-    }
-
-    __both__ __forceinline__ bool TestAABB(
-        const MeshInfoHeader& mesh,
-        const Ray& ray
-    ) {
-        auto transform = mesh.transform;
-        //auto aabb = mesh.aabb.Transformed(transform);
-        float min, max;
-        return TestAABB(mesh.aabb, ray, transform, min, max);
-    }
 
    
     //MOLLER_TRUMBORE 
@@ -366,119 +303,6 @@ namespace CUDATracer {
     }
 
 
-    //MOLLER_TRUMBORE 
-    __device__ bool NearestIntersect(
-        const MeshInfoHeader& mesh,
-        const Ray& ray,
-
-        Intersection& outInt
-    ) {
-
-        //    return NearestIntersect(ray,
-        //        mesh.GetVertices(),
-        //        mesh.GetIndices(),
-        //        mesh.indicesCnt,
-        //        mesh.transform,
-        //        outInt
-        //    );
-        //}
-        const Vertex* __restrict__ vertices = mesh.GetVertices();
-        const std::uint32_t* __restrict__ indices = mesh.GetIndices();
-        std::uint32_t triangleCnt = mesh.indicesCnt / 3;
-        const Math::mat4x4f& transform = mesh.transform;
-
-        bool hit = false;
-        //auto triangleCnt = indicesCnt / 3;
-
-        float tmin = Math::infty();
-        Math::vec3f weights;
-        int ti;//closest triangle index
-        bool frontFacing;
-        Math::vec3f pos;
-        for (std::uint32_t i = 0; i < triangleCnt; i++) {
-            std::uint32_t addr = i * 3;
-            auto& _v0 = vertices[indices[addr]];
-            auto& _v1 = vertices[indices[addr + 1]];
-            auto& _v2 = vertices[indices[addr + 2]];
-            auto p0 = Math::MatMul(transform, Math::vec4f(_v0.position, 1));
-            auto p1 = Math::MatMul(transform, Math::vec4f(_v1.position, 1));
-            auto p2 = Math::MatMul(transform, Math::vec4f(_v2.position, 1));
-
-
-            // Calculate the vertices relative to the ray origin
-            Math::vec3f v0(p0);
-            Math::vec3f v1(p1);
-            Math::vec3f v2(p2);
-
-            auto v0v1 = v1 - v0;
-            auto v0v2 = v2 - v0;
-            auto pvec = Math::cross(ray.dir, v0v2);
-            float det = Math::dot(v0v1, pvec);
-
-            // if the determinant is negative the triangle is backfacing
-            // if the determinant is close to 0, the ray misses the triangle
-            //if (det < FLT_EPSILON) continue;
-            // ray and triangle are parallel if det is close to 0
-            if (fabs(det) < FLT_EPSILON) continue;
-            float invDet = 1 / det;
-
-            auto tvec = ray.origin - v0;
-            auto u = Math::dot(tvec, pvec) * invDet;
-            if (u < 0 || u > 1) continue;
-
-            auto qvec = Math::cross(tvec, v0v1);
-            auto v = Math::dot(ray.dir, qvec) * invDet;
-            if (v < 0 || u + v > 1) continue;
-
-            auto t = Math::dot(v0v2, qvec) * invDet;
-
-            if (t > 0) {
-                hit = true;
-
-                if (t < tmin) {
-                    tmin = t;
-                    ti = i;
-                    weights = { 1 - u - v, u,v };
-                    frontFacing = det > 0;
-                }
-            }
-
-
-        }
-
-        if (hit) {
-            //Populate intersection info
-            outInt.frontFacing = frontFacing;
-            outInt.t = tmin;
-
-            auto addr = ti * 3;
-            auto& v0 = vertices[indices[addr]];
-            auto& v1 = vertices[indices[addr + 1]];
-            auto& v2 = vertices[indices[addr + 2]];
-
-            auto n0 = Math::MatMul(transform, Math::vec4f(v0.normal, 0));
-            auto n1 = Math::MatMul(transform, Math::vec4f(v1.normal, 0));
-            auto n2 = Math::MatMul(transform, Math::vec4f(v2.normal, 0));
-
-
-            outInt.uv = v0.uv * weights.x +
-                v1.uv * weights.y +
-                v2.uv * weights.z;
-            outInt.normal =
-                Math::normalize(Math::vec3f(n0)) * weights.x +
-                Math::normalize(Math::vec3f(n1)) * weights.y +
-                Math::normalize(Math::vec3f(n2)) * weights.z;
-            outInt.position = ray.origin + ray.dir * tmin;
-            //outInt.position = v0.position * weights.x +
-            //                  v1.position * weights.y +
-            //                  v2.position * weights.z;
-
-
-        }
-        //__syncwarp();
-        return hit;
-    }
-    
 
     __device__ void RayHitBox(const Ray& ray, const AABB& box, Math::vec3f& outNorm, float& outT) {
 
@@ -527,19 +351,8 @@ namespace CUDATracer {
     }
 
     struct PRD {
-        //bool isHit;
-
-        const PRD* prev;
         LCG<>* randGen;
         unsigned ttl;/*Time to live, that is how many light bounces left*/
-
-        //float ni;/*inbound refraction index*/
-        //Ray ray;
-        //Intersection rayHit;
-        //
-        //Math::vec3f color;
-        //float reflectStr;
-        //float refractStr;
     };
 
     class RTProgram {
@@ -548,7 +361,7 @@ namespace CUDATracer {
         SceneInfoHeader* scene;
         PathTraceSettings* settings;
 
-        __both__ RTProgram(SceneInfoHeader* scene, PathTraceSettings* settings)
+        __both__ RTProgram(SceneInfoHeader* scene, PathTraceSettings* settings, bool refractive = true)
             :scene(scene), settings(settings){}
 
         __device__ Math::vec3f GenRay(const Math::vec2i& rayID, std::uint32_t mask) {
@@ -602,73 +415,11 @@ namespace CUDATracer {
             Ray ray{
                 cam.pos, rayDir
             };
-            
-            return this->LaunchRayRecur(ray, &prd, mask);
+            //if(useRefractive)
+                return this->LaunchRayRecur(ray, &prd, mask);
+            //else
+                //return this->LaunchRay(ray, &prd, mask);
 
-        }
-
-        __device__ Math::vec3f LaunchRay(const Ray& ray, PRD* prd, std::uint32_t mask) {
-            //auto mask = __activemask();
-            int ttl = settings->maxDepth;
-            Ray currRay = ray;
-            Math::vec3f currColor = 1.f;
-
-            //Masking out missed rays
-            auto rayMask = mask;
-            Intersection hit;
-            bool hasIntc = false;
-            while (ttl--) {
-
-                __syncwarp(rayMask);
-                hasIntc = TraceRay(currRay,hit, rayMask);
-                                
-                //Do the masking
-                rayMask = __ballot_sync(rayMask, hasIntc);
-
-                if (!hasIntc) {
-                    return currColor * OnMiss(currRay, prd);
-                    //return {0.3,0.9,0.1};
-                }
-            
-                //auto depth = prd->ttl;
-                auto& mesh = *(const MeshInfoHeader*)hit.object;
-                auto& mat = mesh.material;
-
-            
-                if (!hit.frontFacing)
-                    return Math::vec3f(1, 0, 0);//return SkyColor(ray.dir); 
-                //n2 = prd->prev == nullptr? 1 : prd->prev->ni;
-                currColor *= mat.color;
-                auto dir = Math::reflect(currRay.dir, hit.normal);
-
-            //auto& mesh = *(const MeshInfoHeader*)hit.object;
-
-            Math::vec3f raySelDir = RandDirInsideCone(
-                *(prd->randGen), dir, mat.roughness);
-
-            //Math::vec3f raySelDir = RandDirInsideCone(
-            //    *(prd->randGen), hit.normal, hit.normal, 0.5);
-
-
-            //if(glm::dot(raySelDir, hit_min.normal) <= 0)
-            //    return glm::vec3(0);        
-
-                currRay = {
-                    hit.position + hit.normal * 1e-5f,
-                    raySelDir
-                };
-            //
-            //
-            //auto c = LaunchRay(out_ray, &thisprd);
-            //return mat.color * c;
-
-            
-            
-            }
-            //Reach max limit will automatically fall to here
-
-            __syncwarp(mask);
-            return 0;
         }
 
 
@@ -693,26 +444,9 @@ namespace CUDATracer {
                     auto norm = GGXRandDirInsideCone(*(prd->randGen), surfaceNorm, mat.roughness);
 
                     auto dir = Math::reflect(ray.dir, norm);
-                    
-                    
-                    //Refraction index(incident)
-                    //float n1 = prd->ni;
-                    float n1 = 1.f;
-                    //Refraction index(refraction)
-                    float n2 = mat.n;
-                    n2 += FLT_EPSILON;
-                    //Outbound ray, fetch prev n
-                    
-                    if(!hit.frontFacing){
-                        auto t = n1; n1 = n2; n2 = t;
-                    }
-
-                    //Math::vec3f raySelDir = RandDirInsideCone(
-                    //    *(prd->randGen), hit.normal, dir, mat.roughness);
-                    //auto raySelDir = dir;
 
                     Ray out_ray = {
-                        hit.position + norm * 1e-5f,
+                        hit.position + surfaceNorm * 1e-6f,
                         dir//raySelDir
                     };
 
@@ -722,62 +456,76 @@ namespace CUDATracer {
                     thisprd.randGen = prd->randGen;
 
                     auto c = LaunchRayRecur(out_ray, &thisprd, launchMask);
+                    c = Math::clamp(c,Math::vec3f(0),Math::vec3f(Math::infty()));
 
-                    //Actual normal
-                    //auto sampleNorm = Math::normalize(raySelDir - ray.dir);
+                        //Refraction index(incident)
+                        //float n1 = prd->ni;
+                        float n1 = 1.f;
+                        //Refraction index(refraction)
+                        float n2 = mat.n;
+                        n2 += FLT_EPSILON;
+                        //Outbound ray, fetch prev n
 
-                    //Schlick's approximation of Fresnel equation
-                    //r(x) = r0 + (1 - r0)(1 - cos(x))^5
-                    //r0 = ((n1 - n2)/(n1 + n2))^2
-                    float r0 = (n1 - n2) / (n1 + n2); r0 *= r0;
+                        if (!hit.frontFacing) {
+                            auto t = n1; n1 = n2; n2 = t;
+                        }
+                        //Actual normal
+                        //auto sampleNorm = Math::normalize(raySelDir - ray.dir);
 
-                    //float rr = r0 + (1 - r0) * (1 - Math::dot(-ray.dir, sampleNorm))^5;
-                    float rr = (1 - Math::dot(-ray.dir, norm));
-                    rr = powf(rr, 5);
-                    rr = r0 + (1 - r0) * rr;
+                        //Schlick's approximation of Fresnel equation
+                        //r(x) = r0 + (1 - r0)(1 - cos(x))^5
+                        //r0 = ((n1 - n2)/(n1 + n2))^2
+                        float r0 = (n1 - n2) / (n1 + n2); r0 *= r0;
 
-                    rr = __saturatef(rr);
+                        //float rr = r0 + (1 - r0) * (1 - Math::dot(-ray.dir, sampleNorm))^5;
+                        float rr = (1 - Math::dot(-ray.dir, norm));
+                        rr = powf(rr, 5);
+                        rr = r0 + (1 - r0) * rr;
 
-                    //Opt-in metallic param
-                    rr = mat.metallic * 1.f + (1 - mat.metallic) * rr;
+                        rr = __saturatef(rr);
 
-                    float rt = 1 - rr;
+                        //Opt-in metallic param
+                        rr = mat.metallic * 1.f + (1 - mat.metallic) * rr;
 
-                    auto reflection_absorb = mat.metallic * mat.color + (1 - mat.metallic) * Math::vec3f(1.f);
-                    currColor = reflection_absorb * c * rr;
+                        float rt = 1 - rr;
 
-                    if(mat.opacity < 1.f){
-                        auto front = (ray.dir + dir) / 2;
-                        auto down = ray.dir - front;
-                        float down_len = Math::length(down);
-                        down = down_len < 1e-10?Math::vec3f(1,0,0):(down/down_len);
-                        //Snell's law
-                        // ni sin(xi) = nt sin(xt)
-                        //               ni sin(xi)
-                        //  sin(xt) = ----------------
-                        //                  nt
-                        
-                        //float front_refr_len = n1 * Math::length(front) / n2;
-                        auto front_refr = front * (n1 / n2);
-                        float front_refr_len = Math::length(front_refr);
-                        if(front_refr_len > 1) front_refr_len = 1;
+                        auto reflection_absorb = mat.metallic * mat.color + (1 - mat.metallic) * Math::vec3f(1.f);
+                        currColor = reflection_absorb * c * rr;
 
-                        float down_refr_len = sqrt(1 - front_refr_len * front_refr_len);
+                        if(mat.opacity < 1.f){
+                            auto front = (ray.dir + dir) / 2;
+                            auto down = ray.dir - front;
+                            float down_len = Math::length(down);
+                            down = down_len < 1e-10?Math::vec3f(1,0,0):(down/down_len);
+                            //Snell's law
+                            // ni sin(xi) = nt sin(xt)
+                            //               ni sin(xi)
+                            //  sin(xt) = ----------------
+                            //                  nt
+                            
+                            //float front_refr_len = n1 * Math::length(front) / n2;
+                            auto front_refr = front * (n1 / n2);
+                            float front_refr_len = Math::length(front_refr);
+                            if(front_refr_len > 1) front_refr_len = 1;
 
-                        auto refr_dir = Math::normalize(front_refr + down * (down_refr_len));
+                            float down_refr_len = sqrt(1 - front_refr_len * front_refr_len);
 
-                        out_ray.dir = refr_dir;
-                        out_ray.origin = hit.position - surfaceNorm * 1e-5f;
+                            auto refr_dir = Math::normalize(front_refr + down * (down_refr_len));
 
-                    }else{
-                        out_ray.dir = RandDirInsideCone(
-                            *(prd->randGen), surfaceNorm, 0.49);
-                        out_ray.origin = hit.position + surfaceNorm * 1e-5f;
+                            out_ray.dir = refr_dir;
+                            out_ray.origin = hit.position - surfaceNorm * 1e-6f;
 
-                    }
-                    __syncwarp(launchMask);
-                    c = LaunchRayRecur(out_ray, &thisprd, launchMask);
-                    currColor += mat.color * c * rt * ((mat.opacity == 1.f)? 1.f : ( 1 - mat.opacity));
+                        }else{
+                            out_ray.dir = RandDirInsideCone(
+                                *(prd->randGen), surfaceNorm, 0.49);
+                            out_ray.origin = hit.position + surfaceNorm * 1e-6f;
+
+                        }
+                        __syncwarp(launchMask);
+                        c = LaunchRayRecur(out_ray, &thisprd, launchMask);
+                        currColor += mat.color * c * rt * ((mat.opacity == 1.f)? 1.f : ( 1 - mat.opacity));
+                    
+                    currColor += mat.emissiveColor * mat.emissiveStrength;
 
                 }else{
                     currColor = OnMiss(ray, nullptr);
@@ -1046,7 +794,7 @@ namespace CUDATracer {
         }
 
         __device__ Math::vec3f OnMiss(const Ray& ray, PRD* prd) {
-            //return { 0,0.3,0.5 };
+            //return { 1,0.3,0.5 };
 
             if(scene->envMap == nullptr){
 
@@ -1130,18 +878,15 @@ namespace CUDATracer {
         float weight = 1.0 / (program.settings->frameID + 1.0);
         //float weight = 1.0;
         
-        //RTProgram program{scene, settings};
-        //auto mask = __activemask();
         //do the launching inside viewport
         Math::vec3f rc = program.GenRay({ i,j }, warpMask);
         //Math::vec3f c = program.Test({i,j});
-        float r = __saturatef(rc.x);
-        float g = __saturatef(rc.y);
-        float b = __saturatef(rc.z);
+        float r = rc.x;//(rc.x >= 0)? rc.x : 0;
+        float g = rc.y;//(rc.y >= 0)? rc.y : 0;
+        float b = rc.z;//(rc.z >= 0)? rc.z : 0;
         Math::vec3f c{r,g,b};
         //Gamma correction
-        c = c / (c + 1.0f);
-        c = Math::pow(c, Math::vec3f(1.0f / 2.2f));
+        
         
         //Assume buffer format RGBA and row priori storage
         auto cbuf = (float*)accBuffer;
@@ -1159,10 +904,18 @@ namespace CUDATracer {
         cbuf[addr + 1] = g;
         cbuf[addr + 2] = b;
         cbuf[addr + 3] = 1;
+
+        c = {
+            __saturatef(r),
+            __saturatef(g),
+            __saturatef(b)
+        };
+        c = c / (c + 1.0f);
+        c = Math::pow(c, Math::vec3f(1.0f / 2.2f));
         
-        fb[addr] = r * 255;
-        fb[addr + 1] = g * 255;
-        fb[addr + 2] = b * 255;
+        fb[addr] =     c.x * 255;
+        fb[addr + 1] = c.y * 255;
+        fb[addr + 2] = c.z * 255;
         fb[addr + 3] = 255;
 
 
@@ -1182,20 +935,6 @@ namespace CUDATracer {
         auto w = stdata->viewportWidth;
         auto h = stdata->viewportHeight;
 
-        //auto traceDepth = stdata->maxDepth;
-        //auto leafCnt = 1 << traceDepth;
-        //
-        //auto dataSize = sizeof(PRD);
-        //auto frameSize = w * h * dataSize;
-        //auto frameCnt = leafCnt * 2 - 1;
-        //auto bufferSize = frameCnt * frameSize;
-        //
-        //if (_rayCache == nullptr || bufferSize > _rayCache->size()) {
-        //    _rayCache = std::make_shared<CUDABuffer>(bufferSize);
-        //}
-        //
-        ////Clear buffers
-        //memset(_rayCache->mutable_cpu_data(),0,bufferSize);
 
         const unsigned batchW = BATCH_W, batchH = BATCH_H;
         const unsigned blockW = (w + batchW - 1) / batchW;
@@ -1211,8 +950,6 @@ namespace CUDATracer {
         RTProgram prog{ scene_gpu, settings_gpu};
 
         GenRay << <blkPerGrid, threadPerBlk >> > (prog, accBuffer, buffer);
-        //GenRay <<< uint3{ 1,1,1 }, uint3{ 1,1,1 } >>> (prog, accBuffer, buffer);
-        //GenRay <<<uint3{1,1,1}, uint3{1,1,1}>>> (scene_gpu, settings_gpu, accBuffer, buffer);
 
         
     }

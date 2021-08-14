@@ -92,7 +92,7 @@ static void GLFWWindow_reshape_cb(GLFWwindow* window, int width, int height)
 {
     GLFWWindow* gw = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
     assert(gw);
-    gw->resize(vec2i{width, height});
+    gw->resize(CUDATracer::Math::vec2i{width, height});
     // assert(GLFWWindow::current);
     //   GLFWWindow::current->resize(vec2i(width,height));
 }
@@ -138,8 +138,8 @@ void GLFWWindow::run()
     glfwSetCursorPosCallback(handle, GLFWWindow_mouseMotion_cb);
 
     while (!glfwWindowShouldClose(handle)) {
+        Update();
         render();
-        draw();
 
         glfwSwapBuffers(handle);
         glfwPollEvents();

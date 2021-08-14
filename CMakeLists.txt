@@ -2,34 +2,21 @@ cmake_minimum_required(VERSION 3.18)
 
 project(CUDAPathTracer
     VERSION 0.1
-    LANGUAGES CXX CUDA)
+    LANGUAGES CUDA CXX C)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+#set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+#set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+#set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 #Enable cuda kernel debugging for debug builds
 
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 add_subdirectory("3rd-party/glfw")
 add_subdirectory("CUDATracer")
 add_subdirectory("Common")
 
-add_executable(SimpleTracer 
-    tracer.cpp
-    rgbe.c
-)
-
-target_include_directories(SimpleTracer PUBLIC ${PROJECT_BINARY_DIR})
-
-target_link_libraries(SimpleTracer 
-    PUBLIC glfw
-           ${OPENGL_gl_LIBRARY}
-           CUDATracer
-           common
-           )
-
-target_compile_features(SimpleTracer PUBLIC cxx_std_14)
-
-#copy default skydome
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/sky.hdr"
-        "${CMAKE_CURRENT_BINARY_DIR}/sky.hdr" COPYONLY)
+add_subdirectory("DefaultScene")
+add_subdirectory("CornellBox")

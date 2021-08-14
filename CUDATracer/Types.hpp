@@ -11,7 +11,9 @@
 #define BVH_DEPTH 32
 #define BVH_MIN_TRICNT 4
 
+
 namespace CUDATracer {
+
 
     class Mesh;
     
@@ -215,6 +217,8 @@ namespace CUDATracer {
         float roughness;
         float metallic;
         float opacity;
+        Math::vec3f emissiveColor;
+        float emissiveStrength;
         /*Refraction index relative to air(1)*/
         float n;
         bool translucent;
@@ -427,5 +431,147 @@ namespace CUDATracer {
 
         std::vector<Mesh> objects;
     };
+
+    inline std::tuple<
+        std::vector<Vertex>,
+        std::vector<std::uint32_t>
+    > MakeCube(const Math::vec3f& offset = {}) {
+#define NX(v) PX(0,0,v)
+#define NY(v) PY(0,0,v)
+#define NZ(v) PZ(0,0,v)
+#define PX(a,b,x) {x,a,b}
+#define PY(a,b,x) {a,x,b}
+#define PZ(a,b,x) {a,b,x}
+#define QUAD(AX, axval, norm)\
+{AX(0,0,axval),norm,{0,0}},{AX(1,0,axval),norm,{1,0}},\
+{AX(1,1,axval),norm,{1,1}},{AX(0,1,axval),norm,{0,1}}
+
+        std::vector<Vertex> v{
+            /*bottom*/QUAD(PY, 0, NY(-1)),/*top*/QUAD(PY, 1, NY(1)),
+            /*x+*/QUAD(PX,1,NX(1)),/*x-*/QUAD(PX,0,NX(-1)),
+            /*z+*/QUAD(PZ, 1, NZ(1)),/*z-*/QUAD(PZ, 0, NZ(-1))
+        };
+#define wind(a,b,c,d) a,b,c,a,c,d
+        std::vector<std::uint32_t> e{
+            /*top*/    wind(0,1,2,3),
+            /*bottom*/ wind(7,6,5,4),
+            /*front*/  wind(8,9,10,11),
+            /*back*/   wind(15,14,13,12),
+            /*left*/   wind(16,17,18,19),
+            /*right*/  wind(23,22,21,20)
+        };
+#undef wind
+
+        for (auto& vt : v) {
+            vt.position += offset;
+        }
+
+        return std::make_tuple(v, e);
+    }
+
+
+    inline std::tuple<
+        std::vector<Vertex>,
+        std::vector<std::uint32_t>
+    > MakeSphere() {
+
+        unsigned seg_y = 40;
+        unsigned seg_x = 80;
+
+        std::vector<Vertex> v{
+            {{0,1,0},{0,1,0},{0.5,1}},//top
+            {{0,-1,0},{0,-1,0},{0.5,0}},//bottom
+        };
+        std::vector<std::uint32_t> e{};
+
+        float delta_x = M_PI * 2 / seg_x;
+        float delta_y = M_PI / seg_y;
+
+        //low to high
+        for (int y = 1; y < seg_y; y++) {
+            float zenith = y * delta_y;
+            float r = std::sin(zenith);
+            float height = -std::cos(zenith);
+            float uv_y = y / seg_y;
+            for (int x = 0; x < seg_x; x++) {
+                float azimuth = x * delta_x;
+                float coord_x = std::cos(azimuth) * r;
+                float coord_z = std::sin(azimuth) * r;
+                float uv_x = x / seg_x;
+                v.push_back({
+                    {coord_x, height, coord_z},
+                    {coord_x, height, coord_z},
+                    {uv_x, uv_y}
+                    });
+            }
+        }
+#define wind(a,b,c,d) a,b,c,a,c,d
+
+        //link elements
+        for (int y = 0; y < seg_y - 2; y++) {
+            int next_y = y + 1;
+            for (int x = 0; x < seg_x; x++) {
+                int next_x = (x + 1) % seg_x;
+
+                unsigned id_l1 = 2 + y * seg_x + x;
+                unsigned id_t1 = 2 + next_y * seg_x + x;
+
+                unsigned id_l2 = 2 + y * seg_x + next_x;
+                unsigned id_t2 = 2 + next_y * seg_x + next_x;
+
+                e.insert(e.end(), { wind(id_l2, id_l1, id_t1, id_t2) });
+
+            }
+        }
+
+#undef wind
+        //seal top and bottom
+        unsigned idx_top = v.size() - seg_x;
+        unsigned idx_bottom = 2;
+        for (int x = 0; x < seg_x; x++) {
+            int next_x = (x + 1) % seg_x;
+            e.insert(e.end(), { 0, idx_top + next_x, idx_top + x, 1, idx_bottom + x, idx_bottom + next_x });
+        }
+
+
+        return std::make_tuple(v, e);
+    }
+
+    inline std::tuple<
+        std::vector<Vertex>,
+        std::vector<std::uint32_t>
+    > MakeQuad(Math::vec2f size = { 1,1 }, Math::vec3f offset = {}) {
+        std::vector<Vertex> v{
+            //lower
+            {Math::vec3f{0,0,0} + offset,{0,1,0},{0,0}},
+            {Math::vec3f{0,0,size.x} + offset,{0,1,0},{0,1}},
+            {Math::vec3f{size.y,0,size.x} + offset,{0,1,0},{1,1}},
+            {Math::vec3f{size.y,0,0} + offset,{0,1,0},{1,0}},
+        };
+#define wind(a,b,c,d) a,b,c,a,c,d
+        std::vector<std::uint32_t> e{
+            /*top*/    wind(0,1,2,3),
+        };
+#undef wind
+        return std::make_tuple(v, e);
+    }
+
+
+    inline Mesh ConstructMesh(const std::tuple<
+        std::vector<Vertex>,
+        std::vector<std::uint32_t>
+    >& pair, const SurfaceMaterial& mat, const Math::mat4x4f& transform) {
+        auto vert = std::get<0>(pair);
+        auto& indi = std::get<1>(pair);
+
+        for (auto& v : vert) {
+            v.position = Math::MatMul(transform, v.position, 1.f);
+            v.normal = Math::MatMul(transform, v.normal, 0.f);
+        }
+
+        return Mesh(vert, indi, mat);
+
+    }
+
 
 }

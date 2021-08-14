@@ -145,10 +145,24 @@ namespace Math {
         return res;
     }
 
-    template<typename R, typename T, typename...Ty>
-    R MatMul(const T& mat,const Ty&...mats) {
-        return MatMul(mat, mats...);
-    }
+
+    //template<typename T, typename...Ty>
+    //struct MatMulRetType
+    //{
+    //    using subTy = typename MatMulRetType<Ty...>::type;
+    //    using type = decltype(MatMul(std::declval<T>(), std::declval<subTy>()));
+    //};
+    //
+    //template<typename T>
+    //struct MatMulRetType<T>
+    //{
+    //    using type = T;
+    //};
+    //
+    //template<typename T, typename...Ty>
+    //typename MatMulRetType<T, Ty...>::type MatMul(const T& mat,const Ty&...mats) {
+    //    return MatMul(mat, MatMul(mats...));
+    //}
 
 #define _element_op(op)                                                           \
 template<typename T1, typename T2, unsigned row, unsigned col>                    \

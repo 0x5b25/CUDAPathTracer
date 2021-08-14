@@ -11,8 +11,9 @@ target_link_libraries(common
            ${GLFW_LIBRARIES}
            #${OPENGL_gl_LIBRARY}
            OpenGL::GL
+           CUDATracer
            )
 
 target_sources(common
     PRIVATE "common.cpp"
- "GLFWWindow.hpp" "GLFWWindow.cpp")
+ "GLFWWindow.hpp" "GLFWWindow.cpp" "rgbe.h" "rgbe.c" "RendererWindow.hpp")
