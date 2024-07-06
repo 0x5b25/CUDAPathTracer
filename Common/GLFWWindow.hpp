@@ -16,7 +16,7 @@ public:
         const std::string& title,
         unsigned width = 1024, unsigned height = 768
     );
-    ~GLFWWindow();
+    virtual ~GLFWWindow();
 
     /*Assume RGBA8 format, origin is bottomleft due to opengl conventions*/
     void DrawBitmap(unsigned width, unsigned height, const std::uint8_t* data);

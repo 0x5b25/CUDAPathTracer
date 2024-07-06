@@ -44,7 +44,7 @@ protected:
 //Rendering infos
     CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings> renderSettings;
     CUDATracer::CUDAScene renderScene;
-    CUDATracer::PathTracer renderer;
+    CUDATracer::PathTracer* renderer;
 
 public:
     //Input handles
@@ -64,6 +64,12 @@ public:
         , camParam{}
         //,bitmap(200*200*4)
     {
+        auto testRenderer = CUDATracer::MakeOptixTracerProg();
+
+        delete testRenderer;
+
+        renderer = CUDATracer::MakeCUDATracerProg();
+
         glfwGetCursorPos(handle, &lastMousePos.x, &lastMousePos.y);
 
         camParam.pos = { -1,1,0 };
@@ -76,6 +82,10 @@ public:
         settings.viewportWidth = width;
         settings.frameID = 0;
         settings.maxDepth = 8;
+    }
+
+    ~RendererWindow() override {
+        delete renderer;
     }
 
     void ResetFrameID() {
@@ -114,7 +124,7 @@ public:
     void render() override
     {
         //Perform render
-        renderer.Trace(
+        renderer->Trace(
             renderScene,
             renderSettings,
             (float*)(accBuffer->mutable_gpu_data()),
