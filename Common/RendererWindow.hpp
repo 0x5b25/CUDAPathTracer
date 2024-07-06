@@ -42,9 +42,9 @@ protected:
     std::shared_ptr<CUDATracer::CUDABuffer> accBuffer;
     //std::shared_ptr<CUDATracer::CUDABuffer> gpuBuffer;
 //Rendering infos
-    std::shared_ptr<CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings>> renderSettings;
+    CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings> renderSettings;
     CUDATracer::CUDAScene renderScene;
-    CUDATracer::PathTracer* renderer;
+    CUDATracer::PathTracer renderer;
 
 public:
     //Input handles
@@ -64,19 +64,12 @@ public:
         , camParam{}
         //,bitmap(200*200*4)
     {
-        //
-        //delete testRenderer;
-
-        //renderer = CUDATracer::MakeCUDATracerProg();
-        renderer = CUDATracer::MakeOptixTracerProg();
-        renderSettings = std::make_shared<CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings>>();
-
         glfwGetCursorPos(handle, &lastMousePos.x, &lastMousePos.y);
 
         camParam.pos = { -1,1,0 };
         camParam.fov = M_PI / 3;
         camParam.zenith = M_PI / 2;
-        auto& settings = renderSettings->GetMutable<0>();
+        auto& settings = renderSettings.GetMutable<0>();
         UpdateCam(settings.cam);
 
         settings.viewportHeight = height;
@@ -85,15 +78,8 @@ public:
         settings.maxDepth = 8;
     }
 
-    ~RendererWindow() override {
-        renderSettings = nullptr;
-        bitmap = nullptr;
-        accBuffer = nullptr;
-        delete renderer;
-    }
-
     void ResetFrameID() {
-        auto& settings = renderSettings->GetMutable<0>();
+        auto& settings = renderSettings.GetMutable<0>();
         settings.frameID = 0;
     }
 
@@ -110,7 +96,7 @@ public:
         bitmap = std::make_shared<CUDATracer::CUDABuffer>(newBufferSize * sizeof(char));
         //}
 
-        auto& settings = renderSettings->GetMutable<0>();
+        auto& settings = renderSettings.GetMutable<0>();
         settings.viewportHeight = newSize.y;
         settings.viewportWidth = newSize.x;
         ResetFrameID();
@@ -121,16 +107,16 @@ public:
     {
         //Update settings
         HandleKeyInput();
-        auto& settings = renderSettings->GetMutable<0>();
+        auto& settings = renderSettings.GetMutable<0>();
         UpdateCam(settings.cam);
     }
 
     void render() override
     {
         //Perform render
-        renderer->Trace(
+        renderer.Trace(
             renderScene,
-            *renderSettings,
+            renderSettings,
             (float*)(accBuffer->mutable_gpu_data()),
             (char*)(bitmap->mutable_gpu_data())
         );
@@ -141,7 +127,7 @@ public:
         auto tbuffer = (std::uint8_t*)bitmap->cpu_data();
 
         //Combine with accumulation buffer
-        auto& settings = renderSettings->GetMutable<0>();
+        auto& settings = renderSettings.GetMutable<0>();
         auto fid = settings.frameID++;
 
         DrawBitmap(bitmapSize.x, bitmapSize.y, tbuffer);
@@ -158,7 +144,7 @@ public:
         if (glfwGetKey(handle, GLFW_KEY_A) == GLFW_PRESS)
             right -= 1;
         if (fwd != 0 || right != 0) {
-            auto& cam = renderSettings->GetMutable<0>().cam;
+            auto& cam = renderSettings.GetMutable<0>().cam;
             camParam.pos += cam.front * fwd * 0.1;
             camParam.pos += cam.right * right * 0.1;
             ResetFrameID();

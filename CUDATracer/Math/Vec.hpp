@@ -18,8 +18,8 @@
 #define _CT_MATH_VEC_
 
 
-#include "MathCommon.h"
-#include "Constants.h"
+#include "Math/MathCommon.h"
+#include "Math/Constants.h"
 #include <iostream>
 #include <cmath>
 #include <algorithm>

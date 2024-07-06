@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "../Quaternion.hpp"
+#include "Math/Quaternion.hpp"
 
 namespace CUDATracer{namespace Math {
 

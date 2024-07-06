@@ -29,21 +29,6 @@
 #include <curand.h>
 #include <driver_types.h>  // cuda driver types
 
-
-// CU_xxx: various checks for driver direct api.
-#define CU_CHECK(condition) \
-  /* Code block avoids redefinition of cudaError_t error */ \
-  do { \
-    CUresult stat = condition; \
-    if(stat != CUDA_SUCCESS) {\
-      const char* err_str;\
-      cuGetErrorString(stat, &err_str);\
-      CHECK_EQ(stat, CUDA_SUCCESS) << " " << err_str\
-      << std::endl; \
-    }\
-  } while (0)
-
-
 // CUDA: various checks for different function calls.
 #define CUDA_CHECK(condition) \
   /* Code block avoids redefinition of cudaError_t error */ \

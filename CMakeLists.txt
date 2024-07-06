@@ -10,7 +10,11 @@ project(CUDAPathTracer
 
 #Enable cuda kernel debugging for debug builds
 
-add_subdirectory("3rd-party")
+
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+add_subdirectory("3rd-party/glfw")
 add_subdirectory("CUDATracer")
 add_subdirectory("Common")
 

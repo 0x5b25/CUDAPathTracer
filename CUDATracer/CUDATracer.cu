@@ -1,4 +1,4 @@
-#include "CUDATracerProg.hpp"
+#include "CUDATracer.hpp"
 
 #include <string>
 #include <float.h>
@@ -922,19 +922,11 @@ namespace CUDATracer {
     }
 
 
-    CUDATracerProg::CUDATracerProg() 
-        : PathTracer()
-    {
-        auto res = cuCtxSetLimit(CU_LIMIT_STACK_SIZE, 8192);
-        if (res != CUDA_SUCCESS) {
-            const char* err_str;
-            cuGetErrorString(res, &err_str);
-            std::cout << err_str << std::endl;
-            DebugBreak();
-        }
+    PathTracer::PathTracer() {
+        cuCtxSetLimit(CU_LIMIT_STACK_SIZE, 8192);
     }
 
-    void CUDATracerProg::Trace(
+    void PathTracer::Trace(
         CUDAScene& scn, TypedBuffer<PathTraceSettings>& settings,
         float* accBuffer, char* buffer
     ){
@@ -957,7 +949,7 @@ namespace CUDATracer {
         //auto cache_gpu = (std::uint8_t*)_rayCache->gpu_data();
         RTProgram prog{ scene_gpu, settings_gpu};
 
-        GenRay <<<blkPerGrid, threadPerBlk >>> (prog, accBuffer, buffer);
+        GenRay << <blkPerGrid, threadPerBlk >> > (prog, accBuffer, buffer);
 
         
     }

@@ -34,29 +34,6 @@ namespace CUDATracer {
 #endif
     }
 
-    CUDABuffer::CUDABuffer(CUDABuffer&& another)
-        : cpu_ptr_(another.cpu_ptr_)
-        , gpu_ptr_(another.gpu_ptr_)
-        , size_(another.size_)
-        , head_(another.head_)
-        , own_cpu_data_(another.own_cpu_data_)
-        , own_gpu_data_(another.own_gpu_data_)
-#ifndef NDEBUG
-        , device_(another.device_)
-#endif
-    {
-        another.cpu_ptr_ = nullptr;
-        another.gpu_ptr_ = nullptr;
-        another.size_ = 0;
-        another.head_ = UNINITIALIZED;
-        another.own_cpu_data_ = false;
-        another.own_gpu_data_ = false;
-
-#ifndef NDEBUG
-        another.device_ = -1;
-#endif
-    }
-
     CUDABuffer::CUDABuffer(size_t size)
         : cpu_ptr_(nullptr), gpu_ptr_(nullptr), size_(size), head_(UNINITIALIZED),
         own_cpu_data_(false), own_gpu_data_(false) {
@@ -67,10 +44,6 @@ namespace CUDATracer {
     }
 
     CUDABuffer::~CUDABuffer() {
-        release_resources();
-    }
-
-    void CUDABuffer::release_resources() {
         check_device();
         if (cpu_ptr_ && own_cpu_data_) {
             CUDA_CHECK(cudaFreeHost(cpu_ptr_));
@@ -80,32 +53,6 @@ namespace CUDATracer {
             CUDA_CHECK(cudaFree(gpu_ptr_));
         }
 
-    }
-
-    CUDABuffer& CUDABuffer::operator=(CUDABuffer&& another) {
-
-        release_resources();
-
-        cpu_ptr_  =  another.cpu_ptr_;
-        gpu_ptr_ = another.gpu_ptr_;
-        size_ = another.size_;
-        head_ = another.head_;
-        own_cpu_data_ = another.own_cpu_data_;
-        own_gpu_data_ = another.own_gpu_data_;
-    
-        another.cpu_ptr_ = nullptr;
-        another.gpu_ptr_ = nullptr;
-        another.size_ = 0;
-        another.head_ = UNINITIALIZED;
-        another.own_cpu_data_ = false;
-        another.own_gpu_data_ = false;
-
-#ifndef NDEBUG
-        device_ = another.device_;
-        another.device_ = -1;
-#endif
-
-        return *this;
     }
 
     inline void CUDABuffer::to_cpu() {
@@ -232,9 +179,6 @@ namespace CUDATracer {
             cudaPointerAttributes attributes;
             CUDA_CHECK(cudaPointerGetAttributes(&attributes, gpu_ptr_));
             CHECK(attributes.device == device_);
-            if (attributes.device != device_) {
-                __debugbreak();
-            }
         }
 #endif
     }
