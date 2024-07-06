@@ -1,6 +1,6 @@
 #include <optix_device.h>
 
-#include "LaunchParams.h"
+#include "ShaderTypes.h"
 
 namespace CUDATracer{
 
@@ -67,17 +67,20 @@ namespace CUDATracer{
     const int ix = optixGetLaunchIndex().x;
     const int iy = optixGetLaunchIndex().y;
 
-    const int r = (ix % 256);
-    const int g = (iy % 256);
-    const int b = ((ix+iy) % 256);
+    char r = (ix &0xff);
+    char g = (iy &0xff);
+    char b = ((ix+iy) &0xff);
 
     // convert to 32-bit rgba value (we explicitly set alpha to 0xff
     // to make stb_image_write happy ...
-    const uint32_t rgba = 0xff000000
-      | (r<<0) | (g<<8) | (b<<16);
+    //const uint32_t rgba = 0xff000000
+    //  | (r<<0) | (g<<8) | (b<<16);
 
     // and write to frame buffer ...
-    const uint32_t fbIndex = ix+iy*optixLaunchParams.fbSize.x;
-    optixLaunchParams.colorBuffer[fbIndex] = rgba;
+    const uint32_t fbIndex = (ix+iy*optixLaunchParams.fbSize.x) * 4;
+    optixLaunchParams.colorBuffer[fbIndex] = r;
+    optixLaunchParams.colorBuffer[fbIndex + 1] = g;
+    optixLaunchParams.colorBuffer[fbIndex + 2] = b;
+    optixLaunchParams.colorBuffer[fbIndex + 3] = 1;
   }
 }

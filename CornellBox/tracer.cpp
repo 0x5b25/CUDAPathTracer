@@ -148,7 +148,7 @@ class AppWindow : public RendererWindow
     AppWindow()
         :RendererWindow(SetupScene())
     {
-        auto& settings = renderSettings.GetMutable<0>();
+        auto& settings = renderSettings->GetMutable<0>();
         settings.maxDepth = 4;
 
         camParam.pos = { -6,0,0 };

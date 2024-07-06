@@ -9,6 +9,8 @@
 
 #include "Logger.hpp"
 
+#include "Shaders/ShaderTypes.h"
+
 namespace CUDATracer {
     
     class OptixTracerProg : public PathTracer {
@@ -22,7 +24,7 @@ namespace CUDATracer {
         CUgraphicsResource m_cudaGraphicsResource;
 
         // All others are OptiX types.
-        OptixFunctionTable m_api;
+        OptixFunctionTable _api;
         OptixDeviceContext m_context;
 
         Logger m_logger;
@@ -30,6 +32,13 @@ namespace CUDATracer {
         OptixTraversableHandle m_root;  // Scene root
         CUdeviceptr            m_d_ias; // Scene root's IAS (instance acceleration structure).
 
+        OptixModule _module;
+        OptixProgramGroup _prog_raygen, _prog_raymiss, _prog_rayhit;
+        OptixShaderBindingTable _sbt;
+        CUDABuffer* _pSbtRecords;
+        OptixPipeline _pipeline;
+
+        TypedBuffer<LaunchParams>* _pLaunchParamsBuffer;
 
     private:
 
@@ -37,10 +46,11 @@ namespace CUDATracer {
         void TearDownOptiX();
 
         bool InitRenderer();
+        void TearDownRenderer();
     
     public:
         OptixTracerProg();
-        virtual ~OptixTracerProg() override {}
+        virtual ~OptixTracerProg() override;
 
     
         virtual void Trace(
