@@ -35,7 +35,7 @@
 #endif
 #include <stdexcept>
 
-#include "CUDACommon.h"
+#include "../CUDACommon.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN

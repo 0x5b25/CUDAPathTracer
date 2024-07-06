@@ -11,7 +11,7 @@
 
 
 #include "OptixCommon.h"
-
+#include "Shaders/DefaultShader.compiled.h"
 
 namespace CUDATracer
 {

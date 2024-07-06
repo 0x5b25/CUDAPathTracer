@@ -1,3 +1,5 @@
+
+
 # Generate a custom build rule to translate *.cu files to *.ptx or *.optixir files.
 # NVCUDA_COMPILE_MODULE(
 #   SOURCES file1.cu file2.cu
@@ -18,7 +20,7 @@ FUNCTION(NVCUDA_COMPILE_MODULE)
   endif()
 
   set(options "")
-  set(oneValueArgs TARGET_PATH GENERATED_FILES EXTENSION)
+  set(oneValueArgs TARGET_PATH GENERATED_FILES)
   set(multiValueArgs NVCC_OPTIONS SOURCES DEPENDENCIES)
 
   CMAKE_PARSE_ARGUMENTS(NVCUDA_COMPILE_MODULE "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -35,19 +37,21 @@ FUNCTION(NVCUDA_COMPILE_MODULE)
     string(REPLACE "${CMAKE_CURRENT_SOURCE_DIR}/" "" REL_PATH "${ABS_PATH}")
 
     # Generate the output *.ptx or *.optixir files directly into the executable's selected target directory.
-    set(output "${NVCUDA_COMPILE_MODULE_TARGET_PATH}/${input_we}${NVCUDA_COMPILE_MODULE_EXTENSION}")
+    set(ptx_file "${NVCUDA_COMPILE_MODULE_TARGET_PATH}/${input_we}.ptx")
+    set(embedded_file "${NVCUDA_COMPILE_MODULE_TARGET_PATH}/${input_we}.compiled.h")
     # message("output = ${output}")
 
-    LIST(APPEND OUTPUT_FILES "${output}")
+    LIST(APPEND OUTPUT_FILES "${embedded_file}")
     
     # This prints the standalone NVCC command line for each CUDA file.
     # CUDAToolkit_NVCC_EXECUTABLE has been set with FindCUDAToolkit.cmake in CMake 3.17 and newer.
-    # message("${CUDAToolkit_NVCC_EXECUTABLE} " "${NVCUDA_COMPILE_MODULE_NVCC_OPTIONS} " "${input} " "-o " "${output}")
+    # message("${CUDAToolkit_NVCC_EXECUTABLE} " "${NVCUDA_COMPILE_MODULE_NVCC_OPTIONS} " "${input} " "-o " "${output}")    
 
     add_custom_command(
-      OUTPUT  "${output}"
+      OUTPUT  ${ptx_file} ${embedded_file}
       DEPENDS "${input}" ${NVCUDA_COMPILE_MODULE_DEPENDENCIES}
-      COMMAND ${CUDAToolkit_NVCC_EXECUTABLE} ${NVCUDA_COMPILE_MODULE_NVCC_OPTIONS} "${input}" -o "${output}"
+      COMMAND ${CUDAToolkit_NVCC_EXECUTABLE} ${NVCUDA_COMPILE_MODULE_NVCC_OPTIONS} --ptx "${input}" -o "${ptx_file}"
+      COMMAND ${CUDAToolkit_BIN_DIR}/bin2c -c --padd 0 --type char --name ${input_we} ${ptx_file} > ${embedded_file}
       WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
   ENDFOREACH( )
@@ -98,16 +102,22 @@ set(CUDATRACER_OPTIXPROG_SHADER_HEADERS
 NVCUDA_COMPILE_MODULE(
   SOURCES ${CUDATRACER_OPTIXPROG_SHADER_SRCS}
   DEPENDENCIES ${CUDATRACER_OPTIXPROG_SHADER_HEADERS}
-  TARGET_PATH "${MODULE_TARGET_DIR}/intro_driver_core"
-  EXTENSION "${OPTIX_MODULE_EXTENSION}"
+  TARGET_PATH ${CMAKE_CURRENT_BINARY_DIR}/Shaders
+  #EXTENSION ".ptx"#"${OPTIX_MODULE_EXTENSION}"
   GENERATED_FILES PROGRAM_MODULES
-  NVCC_OPTIONS "${OPTIX_PROGRAM_TARGET}" "--machine=64" "--gpu-architecture=compute_50" "--use_fast_math" "--relocatable-device-code=true" "--generate-line-info" "-Wno-deprecated-gpu-targets" "--allow-unsupported-compiler" "-I${OPTIX_INCLUDE_DIR}" "-I${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+  NVCC_OPTIONS "${OPTIX_PROGRAM_TARGET}" "--machine=64"
+                                         "--gpu-architecture=compute_50"
+                                         "--use_fast_math"
+                                         "--relocatable-device-code=true"
+                                         "--generate-line-info"
+                                         "-Wno-deprecated-gpu-targets"
+                                         "--allow-unsupported-compiler"
+                                         "-I${OPTIX_INCLUDE_DIR}"
+                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/OptixTraceProg/Shaders"
+                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/Math"
+                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/../Common"
+                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/../3rd-party/optix_8_0_0/include"
 )
-
-
-
-
-
 
 target_sources(CUDATracer
        #"CUDACommon.h" 
@@ -124,11 +134,13 @@ target_sources(CUDATracer
              #"SplitBVHBuilder.cpp"
              ${CUDATRACER_CUDAPROG_SRCS}
              ${CUDATRACER_OPTIXPROG_SRCS}
+             ${PROGRAM_MODULES}
 
 )
 
 target_include_directories(CUDATracer
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+    PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 target_compile_features(CUDATracer PUBLIC cxx_std_17)
@@ -146,6 +158,8 @@ target_link_libraries(CUDATracer
     OptiX80
     common
 )
+
+#add_dependencies(CUDATracer )
 
 #if(CMAKE_BUILD_TYPE EQUAL "Debug")
 #    target_compile_options(CUDATracer PUBLIC $<$<COMPILE_LANGUAGE:CUDA>:-G -g>)
