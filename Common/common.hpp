@@ -17,7 +17,7 @@ private:\
 
 #define CHECK_EQ(val, cond) \
     if(val != cond) __debugbreak();\
-    if(val == cond) {} \
+        if(val == cond) {} \
     else std::cerr << "Error at " __FUNCTION__ ":" __FILE__ ":" xstr(__LINE__) ": "
 
 #ifndef NDEBUG

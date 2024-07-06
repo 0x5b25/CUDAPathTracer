@@ -11,6 +11,8 @@ namespace CUDATracer {
     public:
         CUDABuffer();
         explicit CUDABuffer(size_t size);
+        CUDABuffer(CUDABuffer&& another);
+
         ~CUDABuffer();
         const void* cpu_data();
         void set_cpu_data(void* data);
@@ -24,9 +26,11 @@ namespace CUDATracer {
 
         void async_gpu_push(const cudaStream_t& stream);
 
+        CUDABuffer& operator=(CUDABuffer&& another);
+
     private:
         void check_device();
-
+        void release_resources();
         void to_cpu();
         void to_gpu();
         void* cpu_ptr_;

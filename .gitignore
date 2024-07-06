@@ -60,3 +60,5 @@ out
 .vs
 .vscode
 CMakeSettings.json
+
+3rd-party/optix_8_0_0

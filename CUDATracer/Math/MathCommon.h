@@ -35,7 +35,7 @@
 #endif
 #include <stdexcept>
 
-#include "CUDACommon.h"
+#include "../CUDACommon.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -72,7 +72,8 @@ namespace CUDATracer {namespace Math {
     // inline __both__ float cos(float f) { return ::cosf(f); }
     // inline __both__ double cos(double f) { return ::cos(f); }
 
-    using ::saturate;
+    //using ::saturate;    
+    inline __device__ float saturate(const float& f) { return __saturatef(f); }
 #else
     using std::min;
     using std::max;

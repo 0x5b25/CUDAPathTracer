@@ -148,8 +148,8 @@ class AppWindow : public RendererWindow
     AppWindow()
         :RendererWindow(SetupScene())
     {
-        auto& settings = renderSettings.GetMutable<0>();
-        settings.maxDepth = 6;
+        auto& settings = renderSettings->GetMutable<0>();
+        settings.maxDepth = 4;
 
         camParam.pos = { -6,0,0 };
         camParam.fov = M_PI / 3;
@@ -157,27 +157,27 @@ class AppWindow : public RendererWindow
         UpdateCam(settings.cam);
     }
 
-    void render() override
-    {
-        //Perform render
-        renderer.Trace(
-            renderScene,
-            renderSettings,
-            (float*)(accBuffer->mutable_gpu_data()),
-            (char*)(bitmap->mutable_gpu_data())
-        );
-        //Init settings
-
-
-        //Download data
-        auto tbuffer = (std::uint8_t*)bitmap->cpu_data();
-
-        //Combine with accumulation buffer
-        auto& settings = renderSettings.GetMutable<0>();
-        auto fid = settings.frameID++;
-
-        DrawBitmap(bitmapSize.x, bitmapSize.y, tbuffer);
-    }
+    //void render() override
+    //{
+    //    //Perform render
+    //    renderer->Trace(
+    //        renderScene,
+    //        renderSettings,
+    //        (float*)(accBuffer->mutable_gpu_data()),
+    //        (char*)(bitmap->mutable_gpu_data())
+    //    );
+    //    //Init settings
+    //
+    //
+    //    //Download data
+    //    auto tbuffer = (std::uint8_t*)bitmap->cpu_data();
+    //
+    //    //Combine with accumulation buffer
+    //    auto& settings = renderSettings.GetMutable<0>();
+    //    auto fid = settings.frameID++;
+    //
+    //    DrawBitmap(bitmapSize.x, bitmapSize.y, tbuffer);
+    //}
 };
 
 int main(){
