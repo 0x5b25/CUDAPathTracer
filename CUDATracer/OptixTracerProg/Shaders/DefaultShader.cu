@@ -117,9 +117,23 @@ namespace CUDATracer{
     //------------------------------------------------------------------------------
     
     extern "C" __global__ void __closesthit__radiance() {
+        const TriangleMeshSBTData &sbtData
+            = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();
+
         const int   primID = optixGetPrimitiveIndex();
+        const Math::vec3i index  = sbtData.index[primID];
+        const Math::vec3f &A     = sbtData.vertex[index.x].position;
+        const Math::vec3f &B     = sbtData.vertex[index.y].position;
+        const Math::vec3f &C     = sbtData.vertex[index.z].position;
+        const Math::vec3f Ng     = normalize(cross(B-A,C-A));
+
+        const Math::vec3f rayDir = optixGetWorldRayDirection();
+        const float cosDN  = 0.2f + .8f*fabsf(dot(rayDir,Ng));
+
         auto &prd = *getPRD<PRD>();
-        prd.rc = randomColor(primID);
+        prd.ttl -= 1;
+        prd.rc = cosDN * sbtData.material.color;
+        //prd.rc = randomColor(primID);
     }
     
     extern "C" __global__ void __anyhit__radiance()
@@ -172,7 +186,7 @@ namespace CUDATracer{
 
         const auto &cam = optixLaunchParams.camera;
         
-        float weight = 1.0 / (optixLaunchParams.frame.frameID + 1.0);
+        float weight = 1.0f / (optixLaunchParams.frame.frameID + 1.0f);
 
         
 
@@ -210,7 +224,7 @@ namespace CUDATracer{
         float edgeLen = min(num_x, num_y);
 
         float fovScale = std::atan(cam.fov / 2);
-        float pixelSize = 1.0 / edgeLen * fovScale * 2;
+        float pixelSize = 1.0f / edgeLen * fovScale * 2;
 
         float w = num_x * pixelSize;
         float h = num_y * pixelSize;

@@ -8,6 +8,12 @@ namespace CUDATracer{
 
     enum {RT_TRACE_DEPTH = 4};
 
+    struct TriangleMeshSBTData {
+        const Vertex *vertex;
+        const Math::vec3i *index;
+        SurfaceMaterial material;
+    };
+
     struct LaunchParams
     {
         struct {

@@ -9,34 +9,32 @@
 
 namespace CUDATracer
 {
+
     /*! SBT record for a raygen program */
-    struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) RaygenRecord
-    {
-        __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-        // just a dummy value - later examples will use more interesting
-        // data here
-        void* data;
-    };
+        struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) RaygenRecord
+        {
+            __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+            // just a dummy value - later examples will use more interesting
+            // data here
+            void* data;
+        };
 
-    /*! SBT record for a miss program */
-    struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) MissRecord
-    {
-        __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-        // just a dummy value - later examples will use more interesting
-        // data here
-        void* data;
-    };
+        /*! SBT record for a miss program */
+        struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) MissRecord
+        {
+            __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+            // just a dummy value - later examples will use more interesting
+            // data here
+            void* data;
+        };
 
-    /*! SBT record for a hitgroup program */
-    struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) HitgroupRecord
-    {
-        __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-        // just a dummy value - later examples will use more interesting
-        // data here
-        int objectID;
-    };
-
-
+        /*! SBT record for a hitgroup program */
+        struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) HitgroupRecord
+        {
+            __align__(OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+            TriangleMeshSBTData data;
+        };
+    
     
     bool OptixTracerProg::InitOptiX()
     {
@@ -256,39 +254,7 @@ namespace CUDATracer
         /**************************************
          *        buildSBT                    *
          **************************************/
-        _sbt = {};
-
-        std::size_t totalSize = 0;
-
-        RaygenRecord raygenRecord{ };
-        std::size_t raygenRecordOffset = totalSize; totalSize += sizeof(RaygenRecord);
-        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_raygen, &raygenRecord));
-
-        MissRecord missRecord{ };
-        std::size_t missRecordOffset = totalSize; totalSize += sizeof(MissRecord);
-        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_raymiss, &missRecord));
-
-        HitgroupRecord hitgroupRecord{ };
-        std::size_t hitRecordOffset = totalSize; totalSize += sizeof(HitgroupRecord);
-        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_rayhit, &hitgroupRecord));
-
-        _pSbtRecords = new CUDABuffer{ totalSize };
-        auto currPtr = (char*)_pSbtRecords->mutable_cpu_data();
-        memcpy(currPtr + raygenRecordOffset, &raygenRecord, sizeof(RaygenRecord));
-        memcpy(currPtr + missRecordOffset, &missRecord, sizeof(MissRecord));
-        memcpy(currPtr + hitRecordOffset, &hitgroupRecord, sizeof(HitgroupRecord));
-
-        auto devPtr = (std::size_t)_pSbtRecords->gpu_data();
-
-        _sbt.raygenRecord = (CUdeviceptr)devPtr + raygenRecordOffset;
-
-        _sbt.missRecordBase = (CUdeviceptr)devPtr + missRecordOffset;
-        _sbt.missRecordStrideInBytes = sizeof(MissRecord);
-        _sbt.missRecordCount = 1;
-
-        _sbt.hitgroupRecordBase = (CUdeviceptr)devPtr + hitRecordOffset;
-        _sbt.hitgroupRecordStrideInBytes = sizeof(HitgroupRecord);
-        _sbt.hitgroupRecordCount = 1;
+        //_pSbt = new OptixSBT(_api, _prog_raygen, _prog_raymiss, _prog_rayhit);
 
         //_launchParamsBuffer = std::move(CUDABuffer(sizeof(LaunchParams)));
         _pLaunchParamsBuffer = new TypedBuffer<LaunchParams>();
@@ -312,7 +278,7 @@ namespace CUDATracer
 
         OPTIX_CHECK(_api.Get().optixModuleDestroy(_module));
 
-        delete _pSbtRecords;
+        //delete _pSbtRecords;
         delete _pLaunchParamsBuffer;        
     }
 
@@ -335,15 +301,16 @@ namespace CUDATracer
 
     
     ITraceable* OptixTracerProg::CreateTraceable(const Scene& scene) const {
-        return new OptixTraceable(_api, m_context, scene);
+        return new OptixTraceable(
+            _api, m_context, _prog_raygen, _prog_raymiss, _prog_rayhit, scene);
     }
 
     void OptixTracerProg::Trace(
-        const ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
+        ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
         float* accBuffer, char* buffer
     ){
         auto stdata = (PathTraceSettings*)settings.cpu_data();
-        auto& optixScn = static_cast<const OptixTraceable&>(scn);
+        auto& optixScn = static_cast<OptixTraceable&>(scn);
 
         auto w = stdata->viewportWidth;
         auto h = stdata->viewportHeight;
@@ -379,6 +346,7 @@ namespace CUDATracer
             launchParams.traversable = optixScn.GetHandle();
         }
 
+
         //Upload to GPU
         auto devPtr = (CUdeviceptr)_pLaunchParamsBuffer->gpu_data();
 
@@ -391,7 +359,8 @@ namespace CUDATracer
             /*! parameters and SBT */
             devPtr,
             _pLaunchParamsBuffer->size(),
-            &_sbt,
+            //&_sbt,
+            &optixScn.GetSBT(),
             /*! dimensions of the launch: */
             w,
             h,

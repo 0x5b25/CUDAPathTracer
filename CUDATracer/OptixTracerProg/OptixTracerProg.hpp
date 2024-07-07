@@ -9,6 +9,7 @@
 
 #include "Logger.hpp"
 #include "OptixAPI.hpp"
+#include "OptixSBT.hpp"
 
 #include "Shaders/ShaderTypes.h"
 
@@ -35,8 +36,7 @@ namespace CUDATracer {
 
         OptixModule _module;
         OptixProgramGroup _prog_raygen, _prog_raymiss, _prog_rayhit;
-        OptixShaderBindingTable _sbt;
-        CUDABuffer* _pSbtRecords;
+        
         OptixPipeline _pipeline;
 
         TypedBuffer<LaunchParams>* _pLaunchParamsBuffer;
@@ -57,7 +57,7 @@ namespace CUDATracer {
     
         virtual void Trace(
             //const TypedBuffer<Camera>& cam,
-            const ITraceable& scn,
+            ITraceable& scn,
             TypedBuffer<PathTraceSettings>& settings,
             float* accBuffer,
             char* buffer

@@ -238,7 +238,7 @@ namespace CUDATracer {
     
         virtual void Trace(
             //const TypedBuffer<Camera>& cam,
-            const ITraceable& scn,
+            ITraceable& scn,
             TypedBuffer<PathTraceSettings>& settings,
             float* accBuffer,
             char* buffer

@@ -935,10 +935,10 @@ namespace CUDATracer {
     }
 
     void CUDATracerProg::Trace(
-        const ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
+        ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
         float* accBuffer, char* buffer
     ){
-        auto& cudaScn = static_cast<const CUDATraceable&>(scn);
+        auto& cudaScn = static_cast<CUDATraceable&>(scn);
 
         auto stdata = (PathTraceSettings*)settings.cpu_data();
 

@@ -43,7 +43,7 @@ protected:
     //std::shared_ptr<CUDATracer::CUDABuffer> gpuBuffer;
 //Rendering infos
     std::shared_ptr<CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings>> renderSettings;
-    const CUDATracer::ITraceable* renderScene;
+    CUDATracer::ITraceable* renderScene;
     CUDATracer::IPathTracer* renderer;
 
 public:
