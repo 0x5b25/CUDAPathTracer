@@ -1,6 +1,8 @@
 #pragma once
 
-#include "Vec.hpp"
+#include "Types.hpp"
+#include "optix.h"
+#include "Math/Vec.hpp"
 
 namespace CUDATracer{
 
@@ -8,9 +10,16 @@ namespace CUDATracer{
 
     struct LaunchParams
     {
-        int       frameID { 0 };
-        char      *colorBuffer;
-        Math::vec2i     fbSize;
+        struct {
+            char* colorBuffer;
+            float* accBuffer;
+            Math::vec2i     size;
+            unsigned frameID;
+        } frame;
+
+        Camera camera;
+
+        OptixTraversableHandle traversable;
     };
 
 }

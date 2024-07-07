@@ -43,8 +43,8 @@ protected:
     //std::shared_ptr<CUDATracer::CUDABuffer> gpuBuffer;
 //Rendering infos
     std::shared_ptr<CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings>> renderSettings;
-    CUDATracer::CUDAScene renderScene;
-    CUDATracer::PathTracer* renderer;
+    const CUDATracer::ITraceable* renderScene;
+    CUDATracer::IPathTracer* renderer;
 
 public:
     //Input handles
@@ -60,7 +60,7 @@ public:
         unsigned width = 800, unsigned height = 480
     )
         : GLFWWindow(title, width, height)
-        , renderScene(scene)
+        , renderScene(nullptr)
         , camParam{}
         //,bitmap(200*200*4)
     {
@@ -69,6 +69,9 @@ public:
 
         //renderer = CUDATracer::MakeCUDATracerProg();
         renderer = CUDATracer::MakeOptixTracerProg();
+
+        renderScene = renderer->CreateTraceable(scene);
+
         renderSettings = std::make_shared<CUDATracer::TypedBuffer<CUDATracer::PathTraceSettings>>();
 
         glfwGetCursorPos(handle, &lastMousePos.x, &lastMousePos.y);
@@ -89,6 +92,7 @@ public:
         renderSettings = nullptr;
         bitmap = nullptr;
         accBuffer = nullptr;
+        delete renderScene;
         delete renderer;
     }
 
@@ -129,7 +133,7 @@ public:
     {
         //Perform render
         renderer->Trace(
-            renderScene,
+            *renderScene,
             *renderSettings,
             (float*)(accBuffer->mutable_gpu_data()),
             (char*)(bitmap->mutable_gpu_data())

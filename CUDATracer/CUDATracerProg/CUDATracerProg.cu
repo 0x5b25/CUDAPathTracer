@@ -923,7 +923,7 @@ namespace CUDATracer {
 
 
     CUDATracerProg::CUDATracerProg() 
-        : PathTracer()
+        : IPathTracer()
     {
         auto res = cuCtxSetLimit(CU_LIMIT_STACK_SIZE, 8192);
         if (res != CUDA_SUCCESS) {
@@ -935,9 +935,11 @@ namespace CUDATracer {
     }
 
     void CUDATracerProg::Trace(
-        CUDAScene& scn, TypedBuffer<PathTraceSettings>& settings,
+        const ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
         float* accBuffer, char* buffer
     ){
+        auto& cudaScn = static_cast<const CUDATraceable&>(scn);
+
         auto stdata = (PathTraceSettings*)settings.cpu_data();
 
         auto w = stdata->viewportWidth;
@@ -952,7 +954,7 @@ namespace CUDATracer {
         //uint3 blkPerGrid{ 2, 2, 1 };
         uint3 threadPerBlk{batchW, batchH, 1};
 
-        auto scene_gpu = (SceneInfoHeader*)scn.GetGPUData();
+        auto scene_gpu = (SceneInfoHeader*)cudaScn.GetGPUData();
         auto settings_gpu = (PathTraceSettings*)settings.gpu_data();
         //auto cache_gpu = (std::uint8_t*)_rayCache->gpu_data();
         RTProgram prog{ scene_gpu, settings_gpu};

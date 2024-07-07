@@ -8,12 +8,13 @@
 #include "optix_function_table.h"
 
 #include "Logger.hpp"
+#include "OptixAPI.hpp"
 
 #include "Shaders/ShaderTypes.h"
 
 namespace CUDATracer {
     
-    class OptixTracerProg : public PathTracer {
+    class OptixTracerProg : public IPathTracer {
     
     private:
         // CUDA native types are prefixed with "cuda".
@@ -24,7 +25,7 @@ namespace CUDATracer {
         CUgraphicsResource m_cudaGraphicsResource;
 
         // All others are OptiX types.
-        OptixFunctionTable _api;
+        OptixAPI _api;
         OptixDeviceContext m_context;
 
         Logger m_logger;
@@ -52,10 +53,11 @@ namespace CUDATracer {
         OptixTracerProg();
         virtual ~OptixTracerProg() override;
 
+        virtual ITraceable* CreateTraceable(const Scene& scene) const override;
     
         virtual void Trace(
             //const TypedBuffer<Camera>& cam,
-            CUDAScene& scn,
+            const ITraceable& scn,
             TypedBuffer<PathTraceSettings>& settings,
             float* accBuffer,
             char* buffer

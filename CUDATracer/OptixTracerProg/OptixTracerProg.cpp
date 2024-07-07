@@ -1,182 +1,14 @@
 #include "OptixTracerProg.hpp"
 
-#ifdef _WIN32
-// The cfgmgr32 header is necessary for interrogating driver information in the registry.
-#include <cfgmgr32.h>
-// For convenience the library is also linked in automatically using the #pragma command.
-#pragma comment(lib, "Cfgmgr32.lib")
-#else
-#include <dlfcn.h>
-#endif
 #include <cstring>
 
 #include "OptixCommon.h"
+#include "OptixTraceable.hpp"
+
 #include "Shaders/DefaultShader.compiled.h"
 
 namespace CUDATracer
 {
-    
-#ifdef _WIN32
-    // Code based on helper function in optix_stubs.h
-    static void* optixLoadWindowsDll(void)
-    {
-        const char* optixDllName = "nvoptix.dll";
-        void* handle = NULL;
-
-        // Get the size of the path first, then allocate
-        unsigned int size = GetSystemDirectoryA(NULL, 0);
-        if (size == 0)
-        {
-            // Couldn't get the system path size, so bail
-            return NULL;
-        }
-
-        size_t pathSize = size + 1 + strlen(optixDllName);
-        char*  systemPath = (char*) malloc(pathSize);
-
-        if (GetSystemDirectoryA(systemPath, size) != size - 1)
-        {
-            // Something went wrong
-            free(systemPath);
-            return NULL;
-        }
-
-        strcat(systemPath, "\\");
-        strcat(systemPath, optixDllName);
-
-        handle = LoadLibraryA(systemPath);
-
-        free(systemPath);
-
-        if (handle)
-        {
-            return handle;
-        }
-
-        // If we didn't find it, go looking in the register store.  Since nvoptix.dll doesn't
-        // have its own registry entry, we are going to look for the OpenGL driver which lives
-        // next to nvoptix.dll. 0 (null) will be returned if any errors occured.
-
-        static const char* deviceInstanceIdentifiersGUID = "{4d36e968-e325-11ce-bfc1-08002be10318}";
-        const ULONG        flags = CM_GETIDLIST_FILTER_CLASS | CM_GETIDLIST_FILTER_PRESENT;
-        ULONG              deviceListSize = 0;
-
-        if (CM_Get_Device_ID_List_SizeA(&deviceListSize, deviceInstanceIdentifiersGUID, flags) != CR_SUCCESS)
-        {
-            return NULL;
-        }
-
-        char* deviceNames = (char*) malloc(deviceListSize);
-
-        if (CM_Get_Device_ID_ListA(deviceInstanceIdentifiersGUID, deviceNames, deviceListSize, flags))
-        {
-            free(deviceNames);
-            return NULL;
-        }
-
-        DEVINST devID = 0;
-
-        // Continue to the next device if errors are encountered.
-        for (char* deviceName = deviceNames; *deviceName; deviceName += strlen(deviceName) + 1)
-        {
-            if (CM_Locate_DevNodeA(&devID, deviceName, CM_LOCATE_DEVNODE_NORMAL) != CR_SUCCESS)
-            {
-                continue;
-            }
-
-            HKEY regKey = 0;
-            if (CM_Open_DevNode_Key(devID, KEY_QUERY_VALUE, 0, RegDisposition_OpenExisting, &regKey, CM_REGISTRY_SOFTWARE) != CR_SUCCESS)
-            {
-                continue;
-            }
-
-            const char* valueName = "OpenGLDriverName";
-            DWORD       valueSize = 0;
-
-            LSTATUS     ret = RegQueryValueExA(regKey, valueName, NULL, NULL, NULL, &valueSize);
-            if (ret != ERROR_SUCCESS)
-            {
-                RegCloseKey(regKey);
-                continue;
-            }
-
-            char* regValue = (char*) malloc(valueSize);
-            ret = RegQueryValueExA(regKey, valueName, NULL, NULL, (LPBYTE) regValue, &valueSize);
-            if (ret != ERROR_SUCCESS)
-            {
-                free(regValue);
-                RegCloseKey(regKey);
-                continue;
-            }
-
-            // Strip the OpenGL driver dll name from the string then create a new string with
-            // the path and the nvoptix.dll name
-            for (int i = valueSize - 1; i >= 0 && regValue[i] != '\\'; --i)
-            {
-                regValue[i] = '\0';
-            }
-
-            size_t newPathSize = strlen(regValue) + strlen(optixDllName) + 1;
-            char*  dllPath = (char*) malloc(newPathSize);
-            strcpy(dllPath, regValue);
-            strcat(dllPath, optixDllName);
-
-            free(regValue);
-            RegCloseKey(regKey);
-
-            handle = LoadLibraryA((LPCSTR) dllPath);
-            free(dllPath);
-
-            if (handle)
-            {
-                break;
-            }
-        }
-
-        free(deviceNames);
-
-        return handle;
-    }
-#endif
-
-    
-    static OptixResult InitOptiXFunctionTable( OptixFunctionTable& api)
-    {
-    #ifdef _WIN32
-        void* handle = optixLoadWindowsDll();
-        if (!handle)
-        {
-            return OPTIX_ERROR_LIBRARY_NOT_FOUND;
-        }
-
-        void* symbol = reinterpret_cast<void*>(GetProcAddress((HMODULE) handle, "optixQueryFunctionTable"));
-        if (!symbol)
-        {
-            return OPTIX_ERROR_ENTRY_SYMBOL_NOT_FOUND;
-        }
-    #else
-        void* handle = dlopen("libnvoptix.so.1", RTLD_NOW);
-        if (!handle)
-        {
-            return OPTIX_ERROR_LIBRARY_NOT_FOUND;
-        }
-
-        void* symbol = dlsym(handle, "optixQueryFunctionTable");
-        if (!symbol)
-        {
-            return OPTIX_ERROR_ENTRY_SYMBOL_NOT_FOUND;
-        }
-    #endif
-
-        OptixQueryFunctionTable_t* optixQueryFunctionTable = reinterpret_cast<OptixQueryFunctionTable_t*>(symbol);
-
-        return optixQueryFunctionTable(OPTIX_ABI_VERSION, 0, 0, 0, &api, sizeof(OptixFunctionTable));
-    }
-    
-
-
-
-
     /*! SBT record for a raygen program */
     struct __align__(OPTIX_SBT_RECORD_ALIGNMENT) RaygenRecord
     {
@@ -241,12 +73,6 @@ namespace CUDATracer
           return false;
         }
 
-        OptixResult res = InitOptiXFunctionTable(_api);
-        if (res != OPTIX_SUCCESS)
-        {
-          std::cerr << "ERROR: initOptiX() initOptiXFunctionTable() failed: " << res << '\n';
-          return false;
-        }
 
         OptixDeviceContextOptions options = {};
 
@@ -254,7 +80,7 @@ namespace CUDATracer
         options.logCallbackData     = &m_logger;
         options.logCallbackLevel    = 3; // Keep at warning level to suppress the disk cache messages.
 
-        res = _api.optixDeviceContextCreate(m_cudaContext, &options, &m_context);
+        auto res = _api.Get().optixDeviceContextCreate(m_cudaContext, &options, &m_context);
         if (res != OPTIX_SUCCESS)
         {
           std::cerr << "ERROR: initOptiX() optixDeviceContextCreate() failed: " << res << '\n';
@@ -270,7 +96,7 @@ namespace CUDATracer
     void OptixTracerProg::TearDownOptiX() {
 
         
-        OPTIX_CHECK( _api.optixDeviceContextDestroy(m_context) );
+        OPTIX_CHECK( _api.Get().optixDeviceContextDestroy(m_context) );
         
         CU_CHECK( cuStreamDestroy(m_cudaStream) );
         CU_CHECK( cuCtxDestroy(m_cudaContext) );
@@ -311,7 +137,7 @@ namespace CUDATracer
         char log[2048];
         size_t sizeof_log = sizeof(log);
 //#if OPTIX_VERSION >= 70700
-        OPTIX_CHECK(_api.optixModuleCreate(m_context,
+        OPTIX_CHECK(_api.Get().optixModuleCreate(m_context,
             &moduleCompileOptions,
             &pipelineCompileOptions,
             (const char*)DefaultShader,//ptxCode.c_str(),
@@ -360,7 +186,7 @@ namespace CUDATracer
 
             char log[2048];
             size_t sizeof_log = sizeof(log);
-            auto res = _api.optixProgramGroupCreate(m_context,
+            auto res = _api.Get().optixProgramGroupCreate(m_context,
                 &pgDesc,
                 1,
                 &pgOptions,
@@ -400,7 +226,7 @@ namespace CUDATracer
 
         memset(log, 0, sizeof(log));
         sizeof_log = sizeof(log);
-        OPTIX_CHECK(_api.optixPipelineCreate(m_context,
+        OPTIX_CHECK(_api.Get().optixPipelineCreate(m_context,
             &pipelineCompileOptions,
             &pipelineLinkOptions,
             programGroups.data(),
@@ -410,7 +236,7 @@ namespace CUDATracer
         ));
         if (sizeof_log > 1) PRINT(log);
 
-        OPTIX_CHECK(_api.optixPipelineSetStackSize
+        OPTIX_CHECK(_api.Get().optixPipelineSetStackSize
         (/* [in] The pipeline to configure the stack size for */
             _pipeline,
             /* [in] The direct stack size requirement for direct
@@ -436,15 +262,15 @@ namespace CUDATracer
 
         RaygenRecord raygenRecord{ };
         std::size_t raygenRecordOffset = totalSize; totalSize += sizeof(RaygenRecord);
-        OPTIX_CHECK(_api.optixSbtRecordPackHeader(_prog_raygen, &raygenRecord));
+        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_raygen, &raygenRecord));
 
         MissRecord missRecord{ };
         std::size_t missRecordOffset = totalSize; totalSize += sizeof(MissRecord);
-        OPTIX_CHECK(_api.optixSbtRecordPackHeader(_prog_raymiss, &missRecord));
+        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_raymiss, &missRecord));
 
         HitgroupRecord hitgroupRecord{ };
         std::size_t hitRecordOffset = totalSize; totalSize += sizeof(HitgroupRecord);
-        OPTIX_CHECK(_api.optixSbtRecordPackHeader(_prog_rayhit, &hitgroupRecord));
+        OPTIX_CHECK(_api.Get().optixSbtRecordPackHeader(_prog_rayhit, &hitgroupRecord));
 
         _pSbtRecords = new CUDABuffer{ totalSize };
         auto currPtr = (char*)_pSbtRecords->mutable_cpu_data();
@@ -478,13 +304,13 @@ namespace CUDATracer
 
 
     void OptixTracerProg::TearDownRenderer() {
-        OPTIX_CHECK(_api.optixPipelineDestroy(_pipeline));
+        OPTIX_CHECK(_api.Get().optixPipelineDestroy(_pipeline));
 
         for (auto& pg : { _prog_raygen, _prog_raymiss, _prog_rayhit }) {
-            OPTIX_CHECK(_api.optixProgramGroupDestroy(pg));
+            OPTIX_CHECK(_api.Get().optixProgramGroupDestroy(pg));
         }
 
-        OPTIX_CHECK(_api.optixModuleDestroy(_module));
+        OPTIX_CHECK(_api.Get().optixModuleDestroy(_module));
 
         delete _pSbtRecords;
         delete _pLaunchParamsBuffer;        
@@ -492,7 +318,7 @@ namespace CUDATracer
 
 
     OptixTracerProg::OptixTracerProg() 
-        : PathTracer()
+        : IPathTracer()
         , m_logger(std::cerr)
     {
         //cuCtxSetLimit(CU_LIMIT_STACK_SIZE, 8192);
@@ -507,11 +333,17 @@ namespace CUDATracer
         TearDownOptiX();
     }
 
+    
+    ITraceable* OptixTracerProg::CreateTraceable(const Scene& scene) const {
+        return new OptixTraceable(_api, m_context, scene);
+    }
+
     void OptixTracerProg::Trace(
-        CUDAScene& scn, TypedBuffer<PathTraceSettings>& settings,
+        const ITraceable& scn, TypedBuffer<PathTraceSettings>& settings,
         float* accBuffer, char* buffer
     ){
         auto stdata = (PathTraceSettings*)settings.cpu_data();
+        auto& optixScn = static_cast<const OptixTraceable&>(scn);
 
         auto w = stdata->viewportWidth;
         auto h = stdata->viewportHeight;
@@ -538,19 +370,23 @@ namespace CUDATracer
     // already done:
         {
             auto& launchParams = _pLaunchParamsBuffer->GetMutable<0>();
-            launchParams.fbSize.x = w;
-            launchParams.fbSize.y = h;
-            launchParams.colorBuffer = buffer;
+            launchParams.frame.size.x = w;
+            launchParams.frame.size.y = h;
+            launchParams.frame.colorBuffer = buffer;
+            launchParams.frame.accBuffer = accBuffer;
+            launchParams.frame.frameID = stdata->frameID;
+            launchParams.camera = stdata->cam;
+            launchParams.traversable = optixScn.GetHandle();
         }
 
         //Upload to GPU
         auto devPtr = (CUdeviceptr)_pLaunchParamsBuffer->gpu_data();
 
-        {
-            auto& launchParams = _pLaunchParamsBuffer->GetMutable<0>();
-            launchParams.frameID++;
-        }
-        OPTIX_CHECK(_api.optixLaunch(/*! pipeline we're launching launch: */
+        //{
+        //    auto& launchParams = _pLaunchParamsBuffer->GetMutable<0>();
+        //    launchParams.frameID++;
+        //}
+        OPTIX_CHECK(_api.Get().optixLaunch(/*! pipeline we're launching launch: */
             _pipeline, m_cudaStream,
             /*! parameters and SBT */
             devPtr,

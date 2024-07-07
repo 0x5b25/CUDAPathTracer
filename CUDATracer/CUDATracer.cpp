@@ -5,7 +5,7 @@
 
 namespace CUDATracer {
 
-    PathTracer::PathTracer() {
+    IPathTracer::IPathTracer() {
 
         CU_CHECK( cuInit(0) ); // Initialize CUDA driver API.
 
@@ -148,12 +148,12 @@ namespace CUDATracer {
     }
 
 
-    PathTracer* MakeCUDATracerProg() {
+    IPathTracer* MakeCUDATracerProg() {
         return new CUDATracerProg();
     }
 
 
-    PathTracer* MakeOptixTracerProg() {
+    IPathTracer* MakeOptixTracerProg() {
         
         return new OptixTracerProg();
     }

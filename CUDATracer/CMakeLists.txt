@@ -85,7 +85,8 @@ set(CUDATRACER_CUDAPROG_SRCS
 
 set(CUDATRACER_OPTIXPROG_SRCS
     "${CUDATRACER_OPTIXPROG_DIR}/OptixTracerProg.cpp"
-
+    "${CUDATRACER_OPTIXPROG_DIR}/OptixTraceable.cpp"
+    "${CUDATRACER_OPTIXPROG_DIR}/OptixAPI.cpp"
 )
 
 set(CUDATRACER_OPTIXPROG_SHADER_SRCS
@@ -96,6 +97,7 @@ set(CUDATRACER_OPTIXPROG_SHADER_HEADERS
     "${CUDATRACER_OPTIXPROG_DIR}/Shaders/ShaderTypes.h"
 )
 
+message(OPTIX_INCLUDE_DIR = "${OPTIX_INCLUDE_DIR}")
 
 # When using OptiX SDK 7.5.0 and CUDA 11.7 or higher, the modules can either be built from OptiX IR input or from PTX input.
 # OPTIX_PROGRAM_TARGET and OPTIX_MODULE_EXTENSION switch the NVCC compilation between the two options.
@@ -105,18 +107,19 @@ NVCUDA_COMPILE_MODULE(
   TARGET_PATH ${CMAKE_CURRENT_BINARY_DIR}/Shaders
   #EXTENSION ".ptx"#"${OPTIX_MODULE_EXTENSION}"
   GENERATED_FILES PROGRAM_MODULES
-  NVCC_OPTIONS "${OPTIX_PROGRAM_TARGET}" "--machine=64"
-                                         "--gpu-architecture=compute_50"
-                                         "--use_fast_math"
-                                         "--relocatable-device-code=true"
-                                         "--generate-line-info"
-                                         "-Wno-deprecated-gpu-targets"
-                                         "--allow-unsupported-compiler"
-                                         "-I${OPTIX_INCLUDE_DIR}"
-                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/OptixTraceProg/Shaders"
-                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/Math"
-                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/../Common"
-                                         "-I${CMAKE_CURRENT_SOURCE_DIR}/../3rd-party/optix_8_0_0/include"
+  NVCC_OPTIONS  "--machine=64"
+                "--gpu-architecture=compute_75"
+                "--use_fast_math"
+                "--relocatable-device-code=true"
+                "--generate-line-info"
+                "-Wno-deprecated-gpu-targets"
+                "--allow-unsupported-compiler"
+                #"-I${OPTIX_INCLUDE_DIR}"
+                "-I${CMAKE_CURRENT_SOURCE_DIR}"
+                "-I${CMAKE_CURRENT_SOURCE_DIR}/OptixTraceProg/Shaders"
+                #"-I${CMAKE_CURRENT_SOURCE_DIR}/Math"
+                "-I${CMAKE_CURRENT_SOURCE_DIR}/../Common"
+                "-I${CMAKE_CURRENT_SOURCE_DIR}/../3rd-party/optix_8_0_0/include"
 )
 
 target_sources(CUDATracer
