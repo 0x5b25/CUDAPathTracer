@@ -106,6 +106,95 @@ namespace CUDATracer{
                    (b&255)/255.f);
     }
 
+    __both__ Math::vec3f RandDirInsideCone(
+        LCG<>& randGen,
+        const Math::vec3f& dir,
+        float size
+    ) {
+        //Calculate "LookAt" transform matrix
+        Math::vec2f right_(dir.z, -dir.x);
+        float rlen_ = Math::length(right_);
+        Math::vec3f right = rlen_ <= 0 ?
+            (Math::vec3f{ 0,0,1 }) :
+            (Math::vec3f{ right_.x, 0, right_.y } / rlen_);
+        Math::vec3f up = Math::cross(right, dir);
+
+        //assert(dot(normal, dir) > 0); //Same direction
+
+        //Pick point on unit sphere with pole = x axis
+        float u = randGen.NextFloat();
+        float v = randGen.NextFloat();
+
+        float theta = M_PI * 2 * u;
+        //float phi = std::acos(1 - 2*v*size);
+
+        float sx = 1 - 2 * v * size;
+        float sy = std::sqrt(1 - sx * sx) * std::cos(theta);
+        float sz = std::sqrt(1 - sx * sx) * std::sin(theta);
+
+        //Rotate pole
+        Math::vec3f sdir =
+            sx * dir +
+            sy * up +
+            sz * right
+            ;
+
+        auto ld = Math::length(dir);
+        auto lu = Math::length(up);
+        auto lr = Math::length(right);
+
+        auto ls = Math::length(sdir);
+        auto lsr = sx * sx + sy * sy + sz * sz;
+
+        //assert(glm::length(sdir) <= 1 + 1e-3);
+        return sdir;
+    }
+
+    __both__ Math::vec3f GGXRandDirInsideCone(
+        LCG<>& randGen,
+        const Math::vec3f& dir,
+        float size
+    ) {
+        //Calculate "LookAt" transform matrix
+        Math::vec2f right_(dir.z, -dir.x);
+        float rlen_ = Math::length(right_);
+        Math::vec3f right = rlen_ <= 0 ?
+            (Math::vec3f{ 0,0,1 }) :
+            (Math::vec3f{ right_.x, 0, right_.y } / rlen_);
+        Math::vec3f up = Math::cross(right, dir);
+
+        //assert(dot(normal, dir) > 0); //Same direction
+
+        //Pick point on unit sphere with pole = x axis
+        float u = randGen.NextFloat();
+        float v = randGen.NextFloat();
+
+        float theta = M_PI * 2 * u;
+        float phi = atan2f(size * sqrtf(v),sqrtf(1-v));
+
+
+        float sx = 1 - sin(phi);
+        float sy = std::sqrt(1 - sx * sx) * std::cos(theta);
+        float sz = std::sqrt(1 - sx * sx) * std::sin(theta);
+
+        //Rotate pole
+        Math::vec3f sdir =
+            sx * dir +
+            sy * up +
+            sz * right
+            ;
+
+        auto ld = Math::length(dir);
+        auto lu = Math::length(up);
+        auto lr = Math::length(right);
+
+        auto ls = Math::length(sdir);
+        auto lsr = sx * sx + sy * sy + sz * sz;
+
+        //assert(glm::length(sdir) <= 1 + 1e-3);
+        return sdir;
+    }
+
     //------------------------------------------------------------------------------
     // closest hit and anyhit programs for radiance-type rays.
     //
@@ -117,23 +206,208 @@ namespace CUDATracer{
     //------------------------------------------------------------------------------
     
     extern "C" __global__ void __closesthit__radiance() {
-        const TriangleMeshSBTData &sbtData
-            = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();
-
-        const int   primID = optixGetPrimitiveIndex();
-        const Math::vec3i index  = sbtData.index[primID];
-        const Math::vec3f &A     = sbtData.vertex[index.x].position;
-        const Math::vec3f &B     = sbtData.vertex[index.y].position;
-        const Math::vec3f &C     = sbtData.vertex[index.z].position;
-        const Math::vec3f Ng     = normalize(cross(B-A,C-A));
-
-        const Math::vec3f rayDir = optixGetWorldRayDirection();
-        const float cosDN  = 0.2f + .8f*fabsf(dot(rayDir,Ng));
-
         auto &prd = *getPRD<PRD>();
-        prd.ttl -= 1;
-        prd.rc = cosDN * sbtData.material.color;
-        //prd.rc = randomColor(primID);
+        int ttl = prd.ttl;
+
+        if(prd.ttl < 1){
+             // set to constant white as background color
+            prd.rc = Math::vec3f(.001f);
+        }
+        else{
+            //Calculate normals
+
+            const TriangleMeshSBTData &sbtData
+                = *(const TriangleMeshSBTData*)optixGetSbtDataPointer();
+
+            auto mat = sbtData.material;
+            
+            const int   primID = optixGetPrimitiveIndex();
+            const Math::vec3i index  = sbtData.index[primID];
+            auto vert0 = sbtData.vertex[index.x];
+            auto vert1 = sbtData.vertex[index.y];
+            auto vert2 = sbtData.vertex[index.z];
+
+            const Math::vec3f v0 = vert0.position;
+            const Math::vec3f v1 = vert1.position;
+            const Math::vec3f v2 = vert2.position;
+            
+            const Math::vec3f rayDir = optixGetWorldRayDirection();
+            Math::vec3f hitPosition = rayDir * optixGetRayTmax() + Math::vec3f(optixGetWorldRayOrigin());
+            
+
+            auto v0v1 = v1 - v0;
+            auto v0v2 = v2 - v0;
+            auto pvec = Math::cross(rayDir, v0v2);
+            float det = Math::dot(v0v1, pvec);
+
+            // if the determinant is negative the triangle is backfacing
+            // if the determinant is close to 0, the ray misses the triangle
+            //if (det < FLT_EPSILON) continue;
+            // ray and triangle are parallel if det is close to 0
+            //if (fabs(det) < FLT_EPSILON) continue;
+            float invDet = 1 / det;
+
+            auto tvec = Math::vec3f(optixGetWorldRayOrigin()) - v0;
+            auto u = Math::dot(tvec, pvec) * invDet;
+            //if (u < 0 || u > 1) continue;
+
+            auto qvec = Math::cross(tvec, v0v1);
+            auto v = Math::dot(rayDir, qvec) * invDet;
+            //if (v < 0 || u + v > 1) continue;
+
+            Math::vec3f weights = { 1 - u - v, u,v };
+
+            const Math::vec2f uv = vert0.uv * weights.x +
+                                   vert1.uv * weights.y +
+                                   vert2.uv * weights.z;
+            const Math::vec3f materalNorm =
+                Math::normalize(vert0.normal) * weights.x +
+                Math::normalize(vert1.normal) * weights.y +
+                Math::normalize(vert2.normal) * weights.z;
+
+            bool hitFrontFace = dot(materalNorm, rayDir) < 0.0f;
+
+            float offset = 1e-4f;
+
+            auto surfaceNorm = hitFrontFace? materalNorm : -materalNorm;
+
+            ////Back face handling
+            //// If the dot product is positive the ray points into the same hemisphere as the face normal, means it's hitting a backface.
+            //// Also remove edge-on cases with the equal comparison.
+            //if (dot(norm, rayDir) > 0.0f)
+            //{
+            //    //return; // Do not calculate anything more for this triangle in the intersection program.
+            //    offset = -1e-4f;
+            //}
+
+            //Calculate reflect dir
+            auto norm = GGXRandDirInsideCone(*(prd.randGen), surfaceNorm, mat.roughness);
+            auto dir = Math::reflect(rayDir, norm);
+
+            auto rayOrigin = hitPosition + surfaceNorm * offset;
+            //Launch reflect ray
+            prd.ttl = ttl-1;
+            
+            uint32_t u0 = optixGetPayload_0(), 
+                     u1 = optixGetPayload_1();
+
+            optixTrace(
+                optixLaunchParams.traversable,
+                rayOrigin,
+                dir,
+                0.f,    // tmin
+                1e20f,  // tmax
+                0.0f,   // rayTime
+                OptixVisibilityMask( 255 ),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,//OPTIX_RAY_FLAG_NONE,
+                SURFACE_RAY_TYPE,             // SBT offset
+                RAY_TYPE_COUNT,               // SBT stride
+                SURFACE_RAY_TYPE,             // missSBTIndex 
+                u0, u1
+            );
+
+            //Get color from ray
+            auto c = Math::clamp( prd.rc,Math::vec3f(0),Math::vec3f(Math::infty()));;
+
+            //Calculate refraction and metalicity
+            //Refraction index(incident)
+            //float n1 = prd->ni;
+            float n1 = 1.f;
+            //Refraction index(refraction)
+            float n2 = mat.n;
+            n2 += FLT_EPSILON;
+            //Outbound ray, fetch prev n
+
+            if (!hitFrontFace) {
+                auto t = n1; n1 = n2; n2 = t;
+            }
+            //Actual normal
+            //auto sampleNorm = Math::normalize(raySelDir - ray.dir);
+
+            //Schlick's approximation of Fresnel equation
+            //r(x) = r0 + (1 - r0)(1 - cos(x))^5
+            //r0 = ((n1 - n2)/(n1 + n2))^2
+            float r0 = (n1 - n2) / (n1 + n2); r0 *= r0;
+
+            //float rr = r0 + (1 - r0) * (1 - Math::dot(-ray.dir, sampleNorm))^5;
+            float rr = (1 - Math::dot(-rayDir, norm));
+            rr = powf(rr, 5);
+            rr = r0 + (1 - r0) * rr;
+
+            rr = __saturatef(rr);
+
+            //Opt-in metallic param
+            rr = mat.metallic * 1.f + (1 - mat.metallic) * rr;
+
+            float rt = 1 - rr;
+
+            auto reflection_absorb = mat.metallic * mat.color + (1 - mat.metallic) * Math::vec3f(1.f);
+            auto currColor = reflection_absorb * c * rr;
+
+            Math::vec3f refractRayDir, refractRayOrigin;
+
+            if(mat.opacity < 1.f){
+                auto front = (rayDir + dir) / 2;
+                auto down = rayDir - front;
+                float down_len = Math::length(down);
+                down = down_len < 1e-6f?Math::vec3f(1,0,0):(down/down_len);
+                //Snell's law
+                // ni sin(xi) = nt sin(xt)
+                //               ni sin(xi)
+                //  sin(xt) = ----------------
+                //                  nt
+
+                //float front_refr_len = n1 * Math::length(front) / n2;
+                auto front_refr = front * (n1 / n2);
+                float front_refr_len = Math::length(front_refr);
+                if(front_refr_len > 1) front_refr_len = 1;
+
+                float down_refr_len = sqrt(1 - front_refr_len * front_refr_len);
+
+                auto refr_dir = Math::normalize(front_refr + down * (down_refr_len));
+
+                refractRayDir = refr_dir;
+                refractRayOrigin = hitPosition - surfaceNorm * offset;
+
+            }else{
+                refractRayDir = RandDirInsideCone(
+                    *(prd.randGen), surfaceNorm, 0.49);
+                refractRayOrigin = hitPosition + surfaceNorm * offset;
+
+            }
+
+            
+            prd.ttl = ttl-1;
+            optixTrace(
+                optixLaunchParams.traversable,
+                refractRayOrigin,
+                refractRayDir,
+                0.f,    // tmin
+                1e20f,  // tmax
+                0.0f,   // rayTime
+                OptixVisibilityMask( 255 ),
+                OPTIX_RAY_FLAG_DISABLE_ANYHIT,//OPTIX_RAY_FLAG_NONE,
+                SURFACE_RAY_TYPE,             // SBT offset
+                RAY_TYPE_COUNT,               // SBT stride
+                SURFACE_RAY_TYPE,             // missSBTIndex 
+                u0, u1
+            );
+
+
+            c = prd.rc;
+            //Calculate color
+            currColor += mat.color * c * rt * ((mat.opacity == 1.f)? 1.f : ( 1 - mat.opacity));
+
+            currColor += mat.emissiveColor * mat.emissiveStrength;
+
+            ////Collect ray color
+            //auto currColor = prd.rc * sbtData.material.color;
+            ////auto currColor = prd.rc * Math::vec3f(uv.x, uv.y, 1);
+            //currColor += sbtData.material.emissiveColor * sbtData.material.emissiveStrength;
+            
+            prd.rc = currColor;
+            //prd.rc = randomColor(primID);
+        }
     }
     
     extern "C" __global__ void __anyhit__radiance()
@@ -152,7 +426,7 @@ namespace CUDATracer{
     extern "C" __global__ void __miss__radiance() {
         auto& prd = *getPRD<PRD>();
         // set to constant white as background color
-        prd.rc = Math::vec3f(1.f);
+        prd.rc = Math::vec3f(.001f);
     }
 
 
